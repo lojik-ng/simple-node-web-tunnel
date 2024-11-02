@@ -8,7 +8,7 @@ const app = express();
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
 
-const SHARED_SECRET = '80f1b2ab-011b-4c0a-a758-9ef76b9547c0'; // Same as client
+const SHARED_SECRET = 'your-secret-key-here'; // Same as client
 let pendingRequests = {};
 
 function generateSignature(data) {
@@ -32,6 +32,7 @@ wss.on('connection', (ws) => {
         try {
             const message = JSON.parse(data);
 
+            // Handle the handshake
             if (message.type === 'handshake') {
                 if (verifyHandshake(message)) {
                     authenticated = true;
@@ -50,6 +51,12 @@ wss.on('connection', (ws) => {
                 return;
             }
 
+            // Respond to "ping" messages to keep the connection alive
+            if (message.type === 'ping') {
+                ws.send(JSON.stringify({ type: 'pong' }));
+                return;
+            }
+
             if (!authenticated) {
                 ws.close();
                 return;
@@ -57,7 +64,6 @@ wss.on('connection', (ws) => {
 
             if (message.type === 'response') {
                 const { requestId, status, headers, body } = message;
-                fs.appendFileSync('out.txt', Object.keys(pendingRequests).join('\n') + '-In\n');
 
                 const pendingReq = pendingRequests[requestId];
                 if (pendingReq) {
@@ -85,6 +91,7 @@ wss.on('connection', (ws) => {
         pendingRequests = {};
     });
 });
+
 
 // Handle all HTTP requests
 app.all('*', (req, res) => {
@@ -129,7 +136,7 @@ app.all('*', (req, res) => {
     });
 });
 
-const PORT = process.env.PORT || 3000;
+const PORT = 3000;
 server.listen(PORT, () => {
     console.log(`Tunnel server running on port ${PORT}`);
 });

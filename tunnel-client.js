@@ -2,21 +2,31 @@ import WebSocket from 'ws';
 import crypto from 'crypto';
 import axios from 'axios';
 
-const SHARED_SECRET = '80f1b2ab-011b-4c0a-a758-9ef76b9547c0'; // Change this!
-const REMOTE_TUNNEL_URL = 'wss://elc.qsd1.org'; // Your shared hosting WebSocket endpoint
-
+const SHARED_SECRET = 'your-secret-key-here';
+const REMOTE_TUNNEL_URL = 'wss://tunnel.example.com';
+const PUBLIC_URL = 'https://tunnel.example.com';
 
 class TunnelClient {
+
     constructor() {
         this.connectionAttempts = 0;
-        this.maxRetries = 10;
+        this.maxRetries = Infinity;
         this.connected = false;
+        this.pingInterval = 30000; // 30 seconds
+        this.pingTimeout = null;
+        this.pingPublicUrl();
         this.setupWebSocket();
+    }
+
+    pingPublicUrl() {
+        axios.get(PUBLIC_URL)
+            .catch(error => {
+                console.error('Error pinging public URL:', error.message);
+            });
     }
 
     setupWebSocket() {
         console.log('Attempting to establish tunnel connection...');
-
         this.ws = new WebSocket(REMOTE_TUNNEL_URL);
 
         this.ws.on('open', () => this.handleOpen());
@@ -30,6 +40,7 @@ class TunnelClient {
         this.connectionAttempts = 0;
         console.log('Tunnel connection established');
         this.performHandshake();
+        this.startPing();  // Start pinging the server to maintain connection
     }
 
     async performHandshake() {
@@ -53,7 +64,6 @@ class TunnelClient {
     }
 
     async handleMessage(data) {
-
         try {
             const message = JSON.parse(data);
 
@@ -63,6 +73,11 @@ class TunnelClient {
                     return;
                 }
                 throw new Error('Handshake failed');
+            }
+
+            if (message.type === 'pong') {
+                clearTimeout(this.pingTimeout);
+                return;
             }
 
             if (message.type === 'request') {
@@ -75,10 +90,8 @@ class TunnelClient {
 
     async handleRequest(message) {
         const { requestId, method, path, headers, body } = message;
-        console.log(`Handling request: ${path}`, requestId);
 
         try {
-            // Forward request to local Apollo server
             const response = await axios({
                 url: `http://localhost:3300${path}`,
                 method,
@@ -90,7 +103,6 @@ class TunnelClient {
                 responseType: 'text'
             });
 
-            // Send response back through tunnel
             this.ws.send(JSON.stringify({
                 type: 'response',
                 requestId,
@@ -112,6 +124,7 @@ class TunnelClient {
     handleClose() {
         this.connected = false;
         console.log('Tunnel connection closed');
+        this.stopPing();
         this.attemptReconnection();
     }
 
@@ -119,6 +132,7 @@ class TunnelClient {
         console.error('Tunnel connection error:', error);
         if (this.connected) {
             this.connected = false;
+            this.stopPing();
             this.attemptReconnection();
         }
     }
@@ -129,11 +143,28 @@ class TunnelClient {
             return;
         }
 
+        this.pingPublicUrl();
         const backoffTime = Math.min(1000 * Math.pow(2, this.connectionAttempts), 30000);
         this.connectionAttempts++;
-
         console.log(`Attempting reconnection in ${backoffTime}ms (attempt ${this.connectionAttempts})`);
         setTimeout(() => this.setupWebSocket(), backoffTime);
+    }
+
+    startPing() {
+        this.pingIntervalId = setInterval(() => {
+            if (this.ws.readyState === WebSocket.OPEN) {
+                this.ws.send(JSON.stringify({ type: 'ping' }));
+                this.pingTimeout = setTimeout(() => {
+                    console.error('Ping timeout: server did not respond');
+                    this.ws.terminate(); // Force close if no pong received
+                }, this.pingInterval);
+            }
+        }, this.pingInterval);
+    }
+
+    stopPing() {
+        clearInterval(this.pingIntervalId);
+        clearTimeout(this.pingTimeout);
     }
 }
 
