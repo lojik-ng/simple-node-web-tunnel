@@ -5,6 +5,7 @@ import axios from 'axios';
 const SHARED_SECRET = 'your-secret-key-here';
 const REMOTE_TUNNEL_URL = 'wss://tunnel.example.com';
 const PUBLIC_URL = 'https://tunnel.example.com';
+const LOCAL_PORT = 3000;
 
 class TunnelClient {
 
@@ -93,11 +94,11 @@ class TunnelClient {
 
         try {
             const response = await axios({
-                url: `http://localhost:3300${path}`,
+                url: `http://localhost:${LOCAL_PORT}${path}`,
                 method,
                 headers: {
                     ...headers,
-                    'host': 'localhost:3300'
+                    'host': `localhost:${LOCAL_PORT}`
                 },
                 data: body ? Buffer.from(body, 'base64') : undefined,
                 responseType: 'text'
