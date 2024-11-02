@@ -20,10 +20,10 @@ Allows you to securely expose your local server to the internet by creating an e
 - Server checks for both authentication AND readiness before forwarding requests
 - Preserves all HTTP methods
 - Maintains headers and status codes
-- Handles binary data using base64 encoding
+- Handles binary data.
 - Supports multiple simultaneous connections
 - Connection error recovery
-- Secure Authentication:
+- Secure Authentication
 - Uses HMAC-SHA256 for request signing
 - Implements handshake process
 - Validates shared secret
